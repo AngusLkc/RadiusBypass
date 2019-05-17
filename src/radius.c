@@ -150,8 +150,8 @@ int main(int argc,const char** argv){
 		exit(-1);
 	}
 	static const char *const usages[] = {
-		"\nDaemon Mode:radiusbypass -p 1812 -s 123456 -u 1536 -d 10240 -t 86400 -f logfile.txt",
-		"\nConsole Mode:radiusbypass -p 1812 -s 123456 -u 1536 -d 10240 -t 86400 -f logfile.txt -D",
+		"\nDaemon Mode:radiusbypass -p 1812 -s 123456 -u 1536 -d 10240 -t 86400 -f logfile.txt -D",
+		"\nConsole Mode:radiusbypass -p 1812 -s 123456 -u 1536 -d 10240 -t 86400 -f logfile.txt",
 		NULL,
 	};
 	int D=0,p=0,u=0,d=0,t=0;
