@@ -6,7 +6,7 @@
 #include "argparse.h"
 
 #define OPT_UNSET 1
-#define OPT_LONG  (1<<1)
+#define OPT_LONG (1<<1)
 
 static const char *prefix_skip(const char *str,const char *prefix){
     size_t len=strlen(prefix);
@@ -37,7 +37,7 @@ static int argparse_getvalue(struct argparse *self,const struct argparse_option 
     if(!opt->value){
         goto skipped;
     }
-	switch(opt->type){
+    switch(opt->type){
         case ARGPARSE_OPT_BOOLEAN:
             if(flags&OPT_UNSET){
                 *(int*)opt->value=*(int*)opt->value-1;
@@ -98,10 +98,10 @@ static int argparse_getvalue(struct argparse *self,const struct argparse_option 
             if(errno){
                 argparse_error(self,opt,strerror(errno),flags);
             }
-	    	if(s[0]!='\0'){
+            if(s[0]!='\0'){
                 argparse_error(self,opt,"expects a numerical value",flags);
             }
-	    	break;
+            break;
         default:
             assert(0);
         }
