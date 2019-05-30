@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -lpthread -Wall -Os -fPIC -static
+CFLAGS = -lpthread -Wall -Os -fPIC
 OBJS = md5.o log.o argparse.o radius.o
 
 all: radiusbypass
