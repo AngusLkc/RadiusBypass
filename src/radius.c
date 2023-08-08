@@ -239,11 +239,11 @@ void* auth_fun(void* arg){
 	rad_head* radhead=pkt_data->data;
 	radhead->length=ntohs(radhead->length);
 	if(radhead->code!=Access_Request){
-		log_debug("认证请求包第一个字节非法：%d",radhead->code);
+		log_debug("认证请求包第一个字节非法:%d",radhead->code);
 		return NULL;
 	}
 	if(radhead->length!=pkt_data->len){
-		log_debug("RADIUS头部长度域不等于接收包长度：%d_%d",radhead->length,pkt_data->len);
+		log_debug("RADIUS头部长度域不等于接收包长度:%d_%d",radhead->length,pkt_data->len);
 		return NULL;
 	}
 	rad_attr* radattr=decode_attr(radhead->length-RADIUS_HEAD_LEN,pkt_data->data+RADIUS_HEAD_LEN);
@@ -294,6 +294,17 @@ void send_auth_reply(uint8_t id,uint8_t* auth,char* secret,rad_attr* uname_attr,
 	memcpy(auth_tmp+4,md5_auth,16);
 	sendto(socket,auth_tmp,RADIUS_HEAD_LEN+ATTR_LEN,0,(struct sockaddr*)&client,sizeof(struct sockaddr_in));
 }
+
+ /* 0               1               2               3
+    0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |      Type     |     Length    |          Vendor-Id          |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |    Attr-Id    |  Attr-Length  |      Attribute-Value...     |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |   Attribute-Value......                                     |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
 int build_reply_attr(uint8_t* buffer,rad_attr* uname_attr){
 	int len=0,i;
 	uint32_t uplimitstr,downlimitstr;
@@ -301,10 +312,12 @@ int build_reply_attr(uint8_t* buffer,rad_attr* uname_attr){
 	buffer[1]=*uname_attr->length;
 	memcpy(buffer+2,uname_attr->value,(*uname_attr->length)-2);
 	len+=*uname_attr->length;
+	//Session_Timeout
 	buffer[len]=Session_Timeout;
 	buffer[len+1]=6;
 	memcpy(buffer+len+2,&session_online,4);
 	len+=6;
+	//Class
 	uint8_t unamemd5bin[16];
 	char unamemd5str[32];
 	md5(unamemd5bin,uname_attr->value,(*uname_attr->length)-2);
@@ -315,50 +328,67 @@ int build_reply_attr(uint8_t* buffer,rad_attr* uname_attr){
 	buffer[len+1]=34;
 	memcpy(buffer+len+2,&unamemd5str,32);
 	len+=34;
-	buffer[len]=Vendor_Specific;
-	uint32_t Mikrotik=htonl(MIKROTIK);
-	memcpy(buffer+len+2,&Mikrotik,4);
-	buffer[len+RADIUS_26_HEAD_LEN]=Mikrotik_Rate_Limit;
-	char speedlimit[32];
-	snprintf(speedlimit,32,"%d/%d",uplimit*8*1000,downlimit*8*1000);
-	buffer[len+RADIUS_26_HEAD_LEN+1]=strlen(speedlimit)+2;
-	memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,speedlimit,strlen(speedlimit));
-	buffer[len+1]=strlen(speedlimit)+RADIUS_26_HEAD_LEN+2;
-	len+=buffer[len+1];
-	uplimitstr=htonl(uplimit);
-	buffer[len]=Vendor_Specific;
-	buffer[len+1]=12;
-	uint32_t RoaringPenguin=htonl(Roaring_Penguin);
-	memcpy(buffer+len+2,&RoaringPenguin,4);
-	buffer[len+RADIUS_26_HEAD_LEN]=RP_Upstream_Speed_Limit;
-	buffer[len+RADIUS_26_HEAD_LEN+1]=6;
-	memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,&uplimitstr,4);
-	len+=12;
-	downlimitstr=htonl(downlimit);
-	buffer[len]=Vendor_Specific;
-	buffer[len+1]=12;
-	memcpy(buffer+len+2,&RoaringPenguin,4);
-	buffer[len+RADIUS_26_HEAD_LEN]=RP_Downstream_Speed_Limit;
-	buffer[len+RADIUS_26_HEAD_LEN+1]=6;
-	memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,&downlimitstr,4);
-	len+=12;
-	uplimitstr=htonl(uplimit*1024*8);
-	buffer[len]=Vendor_Specific;
-	buffer[len+1]=12;
-	uint32_t Huawei=htonl(HUAWEI);
-	memcpy(buffer+len+2,&Huawei,4);
-	buffer[len+RADIUS_26_HEAD_LEN]=Huawei_Input_Average_Rate;
-	buffer[len+RADIUS_26_HEAD_LEN+1]=6;
-	memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,&uplimitstr,4);
-	len+=12;
-	downlimitstr=htonl(downlimit*1024*8);
-	buffer[len]=Vendor_Specific;
-	buffer[len+1]=12;
-	memcpy(buffer+len+2,&Huawei,4);
-	buffer[len+RADIUS_26_HEAD_LEN]=Huawei_Output_Average_Rate;
-	buffer[len+RADIUS_26_HEAD_LEN+1]=6;
-	memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,&downlimitstr,4);
-	len+=12;
+	//Mikrotik_Rate_Limit
+	if(uplimit>0&&downlimit>0){
+		buffer[len]=Vendor_Specific;
+		uint32_t Mikrotik=htonl(MIKROTIK);
+		memcpy(buffer+len+2,&Mikrotik,4);
+		buffer[len+RADIUS_26_HEAD_LEN]=Mikrotik_Rate_Limit;
+		char speedlimit[32];
+		snprintf(speedlimit,32,"%d/%d",uplimit*8*1000,downlimit*8*1000);
+		buffer[len+RADIUS_26_HEAD_LEN+1]=strlen(speedlimit)+2;
+		memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,speedlimit,strlen(speedlimit));
+		buffer[len+1]=strlen(speedlimit)+RADIUS_26_HEAD_LEN+2;
+		len+=buffer[len+1];
+	}
+	//RP_Upstream_Speed_Limit
+	if(uplimit>0){
+		uplimitstr=htonl(uplimit);
+		buffer[len]=Vendor_Specific;
+		buffer[len+1]=12;
+		uint32_t RoaringPenguin=htonl(Roaring_Penguin);
+		memcpy(buffer+len+2,&RoaringPenguin,4);
+		buffer[len+RADIUS_26_HEAD_LEN]=RP_Upstream_Speed_Limit;
+		buffer[len+RADIUS_26_HEAD_LEN+1]=6;
+		memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,&uplimitstr,4);
+		len+=12;
+	}
+	//RP_Downstream_Speed_Limit
+	if(downlimit>0){
+		downlimitstr=htonl(downlimit);
+		buffer[len]=Vendor_Specific;
+		buffer[len+1]=12;
+		uint32_t RoaringPenguin=htonl(Roaring_Penguin);
+		memcpy(buffer+len+2,&RoaringPenguin,4);
+		buffer[len+RADIUS_26_HEAD_LEN]=RP_Downstream_Speed_Limit;
+		buffer[len+RADIUS_26_HEAD_LEN+1]=6;
+		memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,&downlimitstr,4);
+		len+=12;
+	}
+	//Huawei_Input_Average_Rate
+	if(uplimit>0){
+		uplimitstr=htonl(uplimit*1024*8);
+		buffer[len]=Vendor_Specific;
+		buffer[len+1]=12;
+		uint32_t Huawei=htonl(HUAWEI);
+		memcpy(buffer+len+2,&Huawei,4);
+		buffer[len+RADIUS_26_HEAD_LEN]=Huawei_Input_Average_Rate;
+		buffer[len+RADIUS_26_HEAD_LEN+1]=6;
+		memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,&uplimitstr,4);
+		len+=12;
+	}
+	//Huawei_Output_Average_Rate
+	if(downlimit>0){
+		downlimitstr=htonl(downlimit*1024*8);
+		buffer[len]=Vendor_Specific;
+		buffer[len+1]=12;
+		uint32_t Huawei=htonl(HUAWEI);
+		memcpy(buffer+len+2,&Huawei,4);
+		buffer[len+RADIUS_26_HEAD_LEN]=Huawei_Output_Average_Rate;
+		buffer[len+RADIUS_26_HEAD_LEN+1]=6;
+		memcpy(buffer+len+RADIUS_26_HEAD_LEN+2,&downlimitstr,4);
+		len+=12;
+	}
 	return len;
 }
 void pap_dec(uint8_t* secret,uint8_t secret_len,uint8_t* auth,uint8_t* pap_pwd,uint8_t pwd_len,uint8_t* pwd_text){
